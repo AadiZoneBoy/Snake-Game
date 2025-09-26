@@ -2,26 +2,32 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Snake Legends Pro</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Snake Deluxe 🎵</title>
 <style>
   body{
     margin:0;
-    background:#222;
-    color:#fff;
-    font-family:system-ui, sans-serif;
-    text-align:center;
+    background:#d0c08a;
+    font-family:sans-serif;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    user-select:none;
   }
   h1{margin:10px 0;}
   canvas{
-    background:#111;
-    border:4px solid #4caf50;
-    display:block;
-    margin:0 auto;
+    background:#f5e298;
+    border:8px solid #b59c67;
+    border-radius:16px;
+    box-shadow:0 0 20px rgba(0,0,0,0.2);
   }
-  .stats{margin:10px 0;}
-  button{
+  #stats{margin:10px;color:#333;font-size:18px;}
+  .controls{
     margin-top:10px;
+    display:flex;
+    gap:12px;
+  }
+  button{
     padding:8px 18px;
     border:none;
     border-radius:8px;
@@ -34,106 +40,176 @@
 </style>
 </head>
 <body>
-  <h1>Snake Legends Pro 🍏</h1>
-  <div class="stats">
-    Score: <span id="score">0</span> |
-    Level: <span id="level">1</span>
-  </div>
-  <canvas id="gameCanvas" width="500" height="500"></canvas>
-  <button id="restartBtn">Restart</button>
+<h1>🐍 Snake Deluxe</h1>
+<div id="stats">Score: <span id="score">0</span> | Level: <span id="level">1</span></div>
+<canvas id="game" width="640" height="480"></canvas>
+<div class="controls">
+  <button id="restart">Restart</button>
+  <button id="musicBtn">Play Music</button>
+</div>
+
+<audio id="bgmusic" loop>
+  <!-- royalty-free chill track -->
+  <source src="https://cdn.pixabay.com/audio/2023/02/22/audio_f8b693f24d.mp3" type="audio/mpeg">
+</audio>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
+const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const box = 20;
-
-let snake, dir, food, score, level, speed, game;
-const apple = new Image();
-apple.src = "https://cdn-icons-png.flaticon.com/512/415/415733.png"; // apple icon
+let snake, dir, food, score, level, speed, nextMoveTime;
+let particles = [];
+const appleImg = new Image();
+appleImg.src = "https://cdn-icons-png.flaticon.com/512/415/415733.png";
 
 function reset(){
   snake = [
-    {x:9*box, y:10*box},
-    {x:8*box, y:10*box},
-    {x:7*box, y:10*box}
+    {x:9*box, y:10*box, px:9*box, py:10*box},
+    {x:8*box, y:10*box, px:8*box, py:10*box},
+    {x:7*box, y:10*box, px:7*box, py:10*box}
   ];
   dir = 'RIGHT';
-  score = 0;
-  level = 1;
-  speed = 150;
+  score = 0; level = 1; speed = 150;
+  nextMoveTime = performance.now()+speed;
   spawnFood();
   updateStats();
-  clearInterval(game);
-  game = setInterval(draw, speed);
+  particles = [];
+  requestAnimationFrame(loop);
 }
-
+function updateStats(){
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+}
 function spawnFood(){
   food = {
     x: Math.floor(Math.random()* (canvas.width/box)) * box,
     y: Math.floor(Math.random()* (canvas.height/box)) * box
   };
 }
-
-function updateStats(){
-  document.getElementById('score').textContent = score;
-  document.getElementById('level').textContent = level;
-}
-
 document.addEventListener('keydown', e=>{
-  if(e.key==="ArrowLeft" && dir!=='RIGHT') dir='LEFT';
-  else if(e.key==="ArrowUp" && dir!=='DOWN') dir='UP';
-  else if(e.key==="ArrowRight" && dir!=='LEFT') dir='RIGHT';
-  else if(e.key==="ArrowDown" && dir!=='UP') dir='DOWN';
+  const k = e.key;
+  if(k==="ArrowLeft" && dir!=='RIGHT') dir='LEFT';
+  else if(k==="ArrowUp" && dir!=='DOWN') dir='UP';
+  else if(k==="ArrowRight" && dir!=='LEFT') dir='RIGHT';
+  else if(k==="ArrowDown" && dir!=='UP') dir='DOWN';
 });
+document.getElementById('restart').onclick = reset;
 
-document.getElementById('restartBtn').addEventListener('click', reset);
+// --- Music controls ---
+const music = document.getElementById('bgmusic');
+const musicBtn = document.getElementById('musicBtn');
+musicBtn.onclick = async ()=>{
+  if(music.paused){
+    await music.play();
+    musicBtn.textContent = "Pause Music";
+  }else{
+    music.pause();
+    musicBtn.textContent = "Play Music";
+  }
+};
+// ----------------------
 
-function draw(){
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // draw apple
-  ctx.drawImage(apple, food.x, food.y, box, box);
-
-  // draw snake: head with a brighter color, body with smooth segments
-  snake.forEach((segment,i)=>{
-    ctx.fillStyle = i===0 ? "#4caf50" : "#66bb6a";
-    ctx.fillRect(segment.x, segment.y, box, box);
-    ctx.strokeStyle = "#000";
-    ctx.strokeRect(segment.x, segment.y, box, box);
-  });
-
-  // calculate new head position
-  let head = { x: snake[0].x, y: snake[0].y };
+function moveSnake(){
+  const head = {x:snake[0].x, y:snake[0].y, px:snake[0].x, py:snake[0].y};
   if(dir==='LEFT') head.x -= box;
   if(dir==='UP') head.y -= box;
   if(dir==='RIGHT') head.x += box;
   if(dir==='DOWN') head.y += box;
 
-  // check food collision
   if(head.x===food.x && head.y===food.y){
     score++;
     if(score % 5 === 0){
       level++;
       speed = Math.max(60, speed - 10);
-      clearInterval(game);
-      game = setInterval(draw, speed);
     }
     updateStats();
     spawnFood();
+    spawnParticles(food.x+box/2, food.y+box/2);
   }else{
-    snake.pop(); // remove tail if no food eaten
+    snake.pop();
   }
 
-  // collision with wall or self
   if(head.x<0 || head.x>=canvas.width || head.y<0 || head.y>=canvas.height ||
-     snake.some(seg => seg.x===head.x && seg.y===head.y)){
-    clearInterval(game);
-    alert("Game Over! Final Score: " + score);
+     snake.some(s=>s.x===head.x && s.y===head.y)){
+    alert("Game Over! Score: "+score);
+    reset();
     return;
   }
-
   snake.unshift(head);
+}
+
+function spawnParticles(x,y){
+  for(let i=0;i<15;i++){
+    particles.push({
+      x,y,
+      vx:(Math.random()-0.5)*3,
+      vy:(Math.random()-0.5)*3,
+      life:1
+    });
+  }
+}
+function updateParticles(dt){
+  particles.forEach(p=>{
+    p.x += p.vx*dt*0.1;
+    p.y += p.vy*dt*0.1;
+    p.life -= dt*0.001;
+  });
+  particles = particles.filter(p=>p.life>0);
+}
+
+function drawSnake(progress){
+  for(let i=0;i<snake.length;i++){
+    const s = snake[i];
+    const px = s.px + (s.x - s.px)*progress;
+    const py = s.py + (s.y - s.py)*progress;
+    const g = ctx.createLinearGradient(px,py,px+box,py+box);
+    g.addColorStop(0,"#3a9d5d");
+    g.addColorStop(1,"#6ec07d");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.roundRect(px, py, box, box, 8);
+    ctx.fill();
+  }
+}
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.fillStyle = `rgba(255,50,50,${p.life})`;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,4*p.life,0,Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function loop(timestamp){
+  ctx.fillStyle = "#f5e298";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(appleImg, food.x, food.y, box, box);
+
+  if(timestamp >= nextMoveTime){
+    snake.forEach(s=>{s.px = s.x; s.py = s.y;});
+    moveSnake();
+    nextMoveTime = timestamp + speed;
+  }
+  const progress = 1 - Math.max(0, (nextMoveTime - timestamp)/speed);
+  drawSnake(progress);
+  updateParticles(16);
+  drawParticles();
+  requestAnimationFrame(loop);
+}
+
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+    this.beginPath();
+    this.moveTo(x+r,y);
+    this.lineTo(x+w-r,y);
+    this.quadraticCurveTo(x+w,y,x+w,y+r);
+    this.lineTo(x+w,y+h-r);
+    this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    this.lineTo(x+r,y+h);
+    this.quadraticCurveTo(x,y+h,x,y+h-r);
+    this.lineTo(x,y+r);
+    this.quadraticCurveTo(x,y,x+r,y);
+  };
 }
 
 reset();
